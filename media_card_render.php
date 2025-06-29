@@ -41,48 +41,48 @@ if(isset($media['drive_links'])) {
     $ep_count = count(explode('|', $media['drive_links']));
 }
 
-// ดึงรูปภาพที่เกี่ยวข้อง
-$related_images = [];
-if($media['file_type'] === 'image') {
-    // ตรวจสอบว่าเป็นรูปภาพที่อัพโหลดหรือไม่
-    if(strpos($media['google_drive_file_id'], 'uploads/images/') === 0) {
-        $related_images[] = $media['google_drive_file_id'];
-    } else {
-        // ถ้าเป็น Google Drive ID
-        $related_images[] = "https://drive.google.com/uc?export=view&id=" . $media['google_drive_file_id'];
-    }
-}
+// แสดงเฉพาะ thumbnail เป็นรูปภาพหลัก
+$display_image = '';
+$has_thumbnail = false;
 
-// ดึงรูปภาพประกอบ
-if(!empty($media['illustrations'])) {
-    if(strpos($media['illustrations'], 'uploads/illustrations/') === 0) {
-        $related_images[] = $media['illustrations'];
-    }
+// ตรวจสอบว่ามี thumbnail หรือไม่ (แสดงเฉพาะ thumbnail เท่านั้น)
+if(!empty($media['thumbnail']) && file_exists(__DIR__ . '/' . $media['thumbnail'])) {
+    $display_image = $media['thumbnail'];
+    $has_thumbnail = true;
 }
-
-// ดึงรูปภาพตัวอย่าง
-$example_sql = "SELECT image_path FROM media_examples WHERE media_id = {$media['id']}";
-$example_result = $conn->query($example_sql);
-while($example = $example_result->fetch_assoc()) {
-    $related_images[] = $example['image_path'];
-}
+// ไม่ใช้รูปภาพเริ่มต้นอื่น ๆ - แสดงเฉพาะ thumbnail ตามที่ผู้ใช้ต้องการ
 ?>
 
 <div class="media-card bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer overflow-hidden" 
      data-detail-url="<?php echo $detail_url; ?>"
      data-can-access="<?php echo $can_access ? '1' : '0'; ?>">
     
-    <!-- ส่วนแสดงรูปภาพ -->
-    <?php if(!empty($related_images)): ?>
+    <!-- ส่วนแสดง thumbnail -->
+    <?php if(!empty($display_image)): ?>
     <div class="relative h-48 bg-gray-100">
-        <img src="<?php echo htmlspecialchars($related_images[0]); ?>" 
+        <img src="<?php echo htmlspecialchars($display_image); ?>" 
              class="w-full h-full object-cover" 
-             alt="<?php echo htmlspecialchars($media['title']); ?>">
-        <?php if(count($related_images) > 1): ?>
-        <div class="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded-full text-xs">
-            <i class="fas fa-images mr-1"></i> <?php echo count($related_images); ?> รูป
+             alt="<?php echo htmlspecialchars($media['title']); ?>"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <!-- Fallback สำหรับกรณีรูปภาพ load ไม่ได้ -->
+        <div class="hidden absolute inset-0 bg-gray-200 items-center justify-center">
+            <div class="text-center text-gray-500">
+                <i class="fas fa-image text-4xl mb-2"></i>
+                <p class="text-sm">ไม่สามารถแสดงภาพได้</p>
+            </div>
         </div>
-        <?php endif; ?>
+        <div class="absolute top-2 left-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs">
+            <i class="fas fa-image mr-1"></i> มีปกคลิป
+        </div>
+    </div>
+    <?php else: ?>
+    <!-- Placeholder สำหรับกรณีไม่มี thumbnail - แสดงเฉพาะ icon กับข้อความ -->
+    <div class="relative h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+        <div class="text-center text-gray-500">
+            <span class="text-4xl mb-2"><?php echo $icon; ?></span>
+            <p class="text-sm font-medium"><?php echo ucfirst($media['file_type']); ?></p>
+            <p class="text-xs text-gray-400 mt-1">ยังไม่มีปกคลิป</p>
+        </div>
     </div>
     <?php endif; ?>
     

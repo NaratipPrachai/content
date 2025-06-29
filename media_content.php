@@ -89,6 +89,11 @@ $search = isset($_GET['search']) ? $_GET['search'] : '';
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
+            
+            <!-- เพิ่ม Pagination -->
+            <?php if(isset($total_pages) && $total_pages > 1): ?>
+                <?php include 'pagination.php'; ?>
+            <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>

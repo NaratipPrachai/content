@@ -18,6 +18,7 @@ if(isset($_POST['add_media'])) {
     $subject_id = intval($_POST['subject_id']);
     $document_references = htmlspecialchars(trim($_POST['document_references']));
     $illustrations = '';
+    $thumbnail = '';
     $google_drive_file_id = '';
     
     // เพิ่ม EP ให้กับวิดีโอ
@@ -120,6 +121,30 @@ if(isset($_POST['add_media'])) {
         }
     }
     
+    // จัดการการอัพโหลดปกคลิป (thumbnail)
+    if(isset($_FILES['thumbnail_file']) && $_FILES['thumbnail_file']['error'] === UPLOAD_ERR_OK) {
+        $upload_dir = 'uploads/thumbnails/';
+        if(!file_exists($upload_dir)) {
+            mkdir($upload_dir, 0777, true);
+        }
+        
+        $file_extension = strtolower(pathinfo($_FILES['thumbnail_file']['name'], PATHINFO_EXTENSION));
+        $allowed_extensions = array('jpg', 'jpeg', 'png', 'gif', 'webp');
+        
+        if(in_array($file_extension, $allowed_extensions)) {
+            $new_filename = uniqid() . '.' . $file_extension;
+            $upload_path = $upload_dir . $new_filename;
+            
+            if(move_uploaded_file($_FILES['thumbnail_file']['tmp_name'], $upload_path)) {
+                $thumbnail = $upload_path;
+            } else {
+                $error = "เกิดข้อผิดพลาดในการอัพโหลดปกคลิป";
+            }
+        } else {
+            $error = "นามสกุลไฟล์ปกคลิปไม่ถูกต้อง (รองรับเฉพาะ jpg, jpeg, png, gif, webp)";
+        }
+    }
+    
     if(isset($_FILES['illustrations_file']) && $_FILES['illustrations_file']['error'] === UPLOAD_ERR_OK) {
         $upload_dir = 'uploads/illustrations/';
         $file_extension = strtolower(pathinfo($_FILES['illustrations_file']['name'], PATHINFO_EXTENSION));
@@ -141,9 +166,9 @@ if(isset($_POST['add_media'])) {
         $conn->begin_transaction();
         
         try {
-            $stmt = $conn->prepare("INSERT INTO media_files (title, document_references, illustrations, file_type, subject_id, created_by, google_drive_file_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ssssiis", $title, $document_references, $illustrations, $file_type, $subject_id, $_SESSION['user_id'], $google_drive_file_id);
+            $stmt = $conn->prepare("INSERT INTO media_files (title, document_references, illustrations, thumbnail, file_type, subject_id, created_by, google_drive_file_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssssiis", $title, $document_references, $illustrations, $thumbnail, $file_type, $subject_id, $_SESSION['user_id'], $google_drive_file_id);
             
             if($stmt->execute()) {
                 $media_id = $conn->insert_id;
@@ -297,15 +322,26 @@ function extract_drive_file_id($url) {
                             </div>
                             
                             <div>
-                                <label class="block text-gray-700 text-sm font-bold mb-2" for="subject_id">สาขาวิชา</label>
-                                <select name="subject_id" id="subject_id" class="w-full px-3 py-2 border rounded-lg shadow-sm input-focus transition duration-300 ease-in-out" required>
-                                    <?php while($subject = $subjects->fetch_assoc()): ?>
-                                    <option value="<?php echo $subject['id']; ?>" <?php echo (isset($_POST['subject_id']) && $_POST['subject_id'] == $subject['id']) ? 'selected' : ''; ?>>
-                                        <?php echo htmlspecialchars($subject['name']); ?>
+                                <label class="block text-gray-700 text-sm font-bold mb-2" for="department_id">สาขาวิชา</label>
+                                <select name="department_id" id="department_id" class="w-full px-3 py-2 border rounded-lg shadow-sm input-focus transition duration-300 ease-in-out" required onchange="updateSubjects(this.value)">
+                                    <option value="">-- เลือกสาขาวิชา --</option>
+                                    <?php 
+                                    $departments = $conn->query("SELECT * FROM departments ORDER BY name");
+                                    while($department = $departments->fetch_assoc()): 
+                                    ?>
+                                    <option value="<?php echo $department['id']; ?>" <?php echo (isset($_POST['department_id']) && $_POST['department_id'] == $department['id']) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($department['name']); ?>
                                     </option>
                                     <?php endwhile; ?>
                                 </select>
                             </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="subject_id">รายวิชา</label>
+                            <select name="subject_id" id="subject_id" class="w-full px-3 py-2 border rounded-lg shadow-sm input-focus transition duration-300 ease-in-out" required>
+                                <option value="">-- เลือกรายวิชา --</option>
+                            </select>
                         </div>
                         
                         <div>
@@ -378,6 +414,14 @@ function extract_drive_file_id($url) {
                                            class="w-full px-3 py-2 border rounded-lg shadow-sm input-focus transition duration-300 ease-in-out">
                                     <p class="text-gray-500 text-xs mt-1">รองรับไฟล์ jpg, jpeg, png, gif</p>
                                 </div>
+
+                                <!-- ส่วนปกคลิป -->
+                                <div>
+                                    <label class="block text-gray-600 text-sm mb-2">ปกคลิป</label>
+                                    <input type="file" name="thumbnail_file" accept="image/*" 
+                                           class="w-full px-3 py-2 border rounded-lg shadow-sm input-focus transition duration-300 ease-in-out">
+                                    <p class="text-gray-500 text-xs mt-1">รองรับไฟล์ jpg, jpeg, png, gif, webp ขนาดไม่เกิน 5MB</p>
+                                </div>
                             </div>
                         </div>
                         
@@ -402,6 +446,25 @@ function extract_drive_file_id($url) {
     </div>
     
     <script>
+        function updateSubjects(departmentId) {
+            const subjectSelect = document.getElementById('subject_id');
+            
+            // Clear current options
+            subjectSelect.innerHTML = '<option value="">-- เลือกรายวิชา --</option>';
+            
+            if(departmentId) {
+                // Fetch subjects for selected department
+                fetch(`get_subjects.php?department_id=${departmentId}`)
+                    .then(response => response.json())
+                    .then(subjects => {
+                        subjects.forEach(subject => {
+                            const option = new Option(subject.name, subject.id);
+                            subjectSelect.add(option);
+                        });
+                    });
+            }
+        }
+
         function toggleFileInput(fileType) {
             const googleDriveInput = document.getElementById('google_drive_input');
             const imageUploadInput = document.getElementById('image_upload_input');
@@ -450,7 +513,7 @@ function extract_drive_file_id($url) {
                 }
             }
         });
-        
+
         // เพิ่มฟังก์ชันสำหรับจัดการลิงค์อ้างอิง
         document.getElementById('add_reference_link').addEventListener('click', function() {
             const container = document.getElementById('reference_links_container');
@@ -491,6 +554,12 @@ function extract_drive_file_id($url) {
         document.addEventListener('DOMContentLoaded', function() {
             const fileType = document.getElementById('file_type').value;
             toggleFileInput(fileType);
+            
+            // ถ้ามีการเลือกสาขาไว้แล้ว ให้โหลดรายวิชาของสาขานั้น
+            const departmentId = document.getElementById('department_id').value;
+            if(departmentId) {
+                updateSubjects(departmentId);
+            }
         });
     </script>
 </body>

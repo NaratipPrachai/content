@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 // หน้าจัดการสื่อ
 session_start();
 include 'db.php';
@@ -19,6 +22,7 @@ if(isset($_POST['add_media'])) {
     $subject_id = intval($_POST['subject_id']);
     $document_references = htmlspecialchars(trim($_POST['document_references']));
     $illustrations = '';
+    $thumbnail = '';
     $google_drive_file_id = '';
     
     // เพิ่ม EP ให้กับวิดีโอ
@@ -33,6 +37,30 @@ if(isset($_POST['add_media'])) {
         // เพิ่ม EP ต่อท้ายชื่อ
         $ep_number = $video_count + 1;
         $title = $title . " EP." . $ep_number;
+    }
+    
+    // จัดการการอัพโหลดปกคลิป (thumbnail)
+    if(isset($_FILES['thumbnail_file']) && $_FILES['thumbnail_file']['error'] === UPLOAD_ERR_OK) {
+        $upload_dir = 'uploads/thumbnails/';
+        if(!file_exists($upload_dir)) {
+            mkdir($upload_dir, 0777, true);
+        }
+        
+        $file_extension = strtolower(pathinfo($_FILES['thumbnail_file']['name'], PATHINFO_EXTENSION));
+        $allowed_extensions = array('jpg', 'jpeg', 'png', 'gif', 'webp');
+        
+        if(in_array($file_extension, $allowed_extensions)) {
+            $new_filename = uniqid() . '.' . $file_extension;
+            $upload_path = $upload_dir . $new_filename;
+            
+            if(move_uploaded_file($_FILES['thumbnail_file']['tmp_name'], $upload_path)) {
+                $thumbnail = $upload_path;
+            } else {
+                $error = "เกิดข้อผิดพลาดในการอัพโหลดปกคลิป";
+            }
+        } else {
+            $error = "นามสกุลไฟล์ปกคลิปไม่ถูกต้อง (รองรับเฉพาะ jpg, jpeg, png, gif, webp)";
+        }
     }
     
     // จัดการการอัพโหลดไฟล์เอกสารอ้างอิง
@@ -153,9 +181,9 @@ if(isset($_POST['add_media'])) {
         
         try {
             // เพิ่มข้อมูลสื่อหลัก
-            $stmt = $conn->prepare("INSERT INTO media_files (title, document_references, illustrations, file_type, subject_id, created_by, google_drive_file_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ssssiis", $title, $document_references, $illustrations, $file_type, $subject_id, $_SESSION['user_id'], $google_drive_file_id);
+            $stmt = $conn->prepare("INSERT INTO media_files (title, document_references, illustrations, thumbnail, file_type, subject_id, created_by, google_drive_file_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssssiis", $title, $document_references, $illustrations, $thumbnail, $file_type, $subject_id, $_SESSION['user_id'], $google_drive_file_id);
             
             if($stmt->execute()) {
                 $media_id = $conn->insert_id;
@@ -232,6 +260,7 @@ if(isset($_POST['edit_media'])) {
     $edit_subject_id = intval($_POST['edit_subject_id']);
     $edit_document_references = htmlspecialchars(trim($_POST['edit_document_references']));
     $edit_illustrations = '';
+    $edit_thumbnail = '';
     
     // จัดการการอัพโหลดรูปภาพ
     $edit_file_id = '';
@@ -285,6 +314,37 @@ if(isset($_POST['edit_media'])) {
         $edit_illustrations = htmlspecialchars(trim($_POST['edit_illustrations']));
     }
     
+    // จัดการการอัพโหลดปกคลิป
+    if(isset($_FILES['edit_thumbnail_file']) && $_FILES['edit_thumbnail_file']['error'] === UPLOAD_ERR_OK) {
+        $upload_dir = 'uploads/thumbnails/';
+        if(!file_exists($upload_dir)) {
+            mkdir($upload_dir, 0777, true);
+        }
+        
+        $file_extension = strtolower(pathinfo($_FILES['edit_thumbnail_file']['name'], PATHINFO_EXTENSION));
+        $allowed_extensions = array('jpg', 'jpeg', 'png', 'gif', 'webp');
+        
+        if(in_array($file_extension, $allowed_extensions)) {
+            $new_filename = uniqid() . '.' . $file_extension;
+            $upload_path = $upload_dir . $new_filename;
+            
+            if(move_uploaded_file($_FILES['edit_thumbnail_file']['tmp_name'], $upload_path)) {
+                // ลบไฟล์เก่าถ้ามี
+                $old_file = $conn->query("SELECT thumbnail FROM media_files WHERE id = $edit_id")->fetch_assoc();
+                if($old_file && !empty($old_file['thumbnail']) && strpos($old_file['thumbnail'], 'uploads/thumbnails/') === 0) {
+                    @unlink($old_file['thumbnail']);
+                }
+                $edit_thumbnail = $upload_path;
+            } else {
+                $error = "เกิดข้อผิดพลาดในการอัพโหลดปกคลิป";
+            }
+        } else {
+            $error = "นามสกุลไฟล์ปกคลิปไม่ถูกต้อง (รองรับเฉพาะ jpg, jpeg, png, gif, webp)";
+        }
+    } else {
+        $edit_thumbnail = htmlspecialchars(trim($_POST['edit_thumbnail']));
+    }
+    
     if(empty($error)) {
         $stmt = $conn->prepare("UPDATE media_files 
                 SET title = ?, 
@@ -292,9 +352,10 @@ if(isset($_POST['edit_media'])) {
                     file_type = ?, 
                     subject_id = ?,
                     document_references = ?,
-                    illustrations = ?
+                    illustrations = ?,
+                    thumbnail = ?
                 WHERE id = ?");
-        $stmt->bind_param("sssissi", $edit_title, $edit_file_id, $edit_file_type, $edit_subject_id, $edit_document_references, $edit_illustrations, $edit_id);
+        $stmt->bind_param("sssisssi", $edit_title, $edit_file_id, $edit_file_type, $edit_subject_id, $edit_document_references, $edit_illustrations, $edit_thumbnail, $edit_id);
         
         if($stmt->execute()) {
             $message = "แก้ไขสื่อ '$edit_title' เรียบร้อยแล้ว";
@@ -310,6 +371,9 @@ $subjects = $conn->query("SELECT * FROM subjects ORDER BY name");
 // ดึงรายการสื่อ
 $filter_subject = isset($_GET['subject']) ? intval($_GET['subject']) : 0;
 $search = isset($_GET['search']) ? htmlspecialchars(trim($_GET['search'])) : '';
+
+// เพิ่มตัวแปรสำหรับกรองตามสาขา
+$filter_department = isset($_GET['department']) ? intval($_GET['department']) : 0;
 
 // สร้าง prepared statement สำหรับการดึงข้อมูลสื่อ
 if($filter_subject > 0) {
@@ -453,17 +517,39 @@ $media_files = $stmt->get_result();
                 <div class="bg-white rounded-lg shadow-md p-4 mb-6 card-shadow">
                     <form method="GET" class="flex flex-col md:flex-row md:items-end gap-4">
                         <div class="w-full md:w-1/3">
-                            <label class="block text-gray-700 text-sm font-bold mb-2">กรองตามวิชา</label>
-                            <select name="subject" class="w-full px-3 py-2 border rounded-lg input-focus transition duration-300 ease-in-out">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">กรองตามสาขา</label>
+                            <select name="department" id="filter_department" class="w-full px-3 py-2 border rounded-lg input-focus transition duration-300 ease-in-out" onchange="updateFilterSubject(this.value)">
                                 <option value="0">-- ทั้งหมด --</option>
                                 <?php 
-                                $subjects_result = $conn->query("SELECT * FROM subjects ORDER BY name");
-                                while($subject = $subjects_result->fetch_assoc()): 
+                                $departments_result = $conn->query("SELECT * FROM departments ORDER BY name");
+                                while($department = $departments_result->fetch_assoc()): 
+                                ?>
+                                <option value="<?php echo $department['id']; ?>" <?php echo ($filter_department == $department['id']) ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($department['name']); ?>
+                                </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
+                        
+                        <div class="w-full md:w-1/3">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">กรองตามวิชา</label>
+                            <select name="subject" id="filter_subject" class="w-full px-3 py-2 border rounded-lg input-focus transition duration-300 ease-in-out">
+                                <option value="0">-- ทั้งหมด --</option>
+                                <?php 
+                                if($filter_department > 0) {
+                                    $subjects_filter = $conn->prepare("SELECT * FROM subjects WHERE department_id = ? ORDER BY name");
+                                    $subjects_filter->bind_param("i", $filter_department);
+                                    $subjects_filter->execute();
+                                    $subjects_result = $subjects_filter->get_result();
+                                    while($subject = $subjects_result->fetch_assoc()): 
                                 ?>
                                 <option value="<?php echo $subject['id']; ?>" <?php echo ($filter_subject == $subject['id']) ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($subject['name']); ?>
                                 </option>
-                                <?php endwhile; ?>
+                                <?php 
+                                    endwhile;
+                                }
+                                ?>
                             </select>
                         </div>
                         
@@ -488,6 +574,7 @@ $media_files = $stmt->get_result();
                                 <tr>
                                     <th class="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                                     <th class="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อสื่อ</th>
+                                    <th class="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ปกคลิป</th>
                                     <th class="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ประเภท</th>
                                     <th class="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วิชา</th>
                                     <th class="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Google Drive ID</th>
@@ -514,6 +601,15 @@ $media_files = $stmt->get_result();
                                             echo htmlspecialchars($media['title']);
                                         }
                                         ?>
+                                    </td>
+                                    <td class="px-3 md:px-6 py-4 whitespace-nowrap">
+                                        <?php if(!empty($media['thumbnail'])): ?>
+                                            <img src="<?php echo htmlspecialchars($media['thumbnail']); ?>" alt="ปกคลิป" class="w-16 h-12 object-cover rounded">
+                                        <?php else: ?>
+                                            <div class="w-16 h-12 bg-gray-200 rounded flex items-center justify-center">
+                                                <i class="fas fa-image text-gray-400"></i>
+                                            </div>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="px-3 md:px-6 py-4 whitespace-nowrap">
                                         <?php 
@@ -557,7 +653,8 @@ $media_files = $stmt->get_result();
                                                         '<?php echo $media['file_type']; ?>', 
                                                         <?php echo $media['subject_id']; ?>, 
                                                         '<?php echo htmlspecialchars(addslashes($media['document_references'])); ?>', 
-                                                        '<?php echo htmlspecialchars(addslashes($media['illustrations'])); ?>'
+                                                        '<?php echo htmlspecialchars(addslashes($media['illustrations'])); ?>',
+                                                        '<?php echo htmlspecialchars(addslashes($media['thumbnail'] ?? '')); ?>'
                                                     )" title="แก้ไข">
                                                 <i class="fas fa-edit"></i><span class="sr-only">แก้ไข</span>
                                             </button>
@@ -574,7 +671,7 @@ $media_files = $stmt->get_result();
                                 
                                 <?php if($media_files->num_rows == 0): ?>
                                 <tr>
-                                    <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                                    <td colspan="7" class="px-6 py-8 text-center text-gray-500">
                                         <div class="flex flex-col items-center justify-center">
                                             <i class="fas fa-search text-gray-300 text-5xl mb-3"></i>
                                             <p>ไม่พบสื่อที่ตรงกับเงื่อนไข</p>
@@ -632,15 +729,25 @@ $media_files = $stmt->get_result();
                     <div>
                         <label class="block text-gray-700 text-sm font-bold mb-2" for="edit_illustrations_file">ภาพประกอบ</label>
                         <input type="file" name="edit_illustrations_file" id="edit_illustrations_file" accept="image/*" class="w-full px-3 py-2 border rounded-lg shadow-sm input-focus transition duration-300 ease-in-out">
+                        <input type="hidden" name="edit_illustrations" id="edit_illustrations">
                         <p class="text-gray-500 text-xs mt-1">รองรับไฟล์ jpg, jpeg, png, gif ขนาดไม่เกิน 5MB</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="edit_thumbnail_file">ปกคลิป</label>
+                        <input type="file" name="edit_thumbnail_file" id="edit_thumbnail_file" accept="image/*" class="w-full px-3 py-2 border rounded-lg shadow-sm input-focus transition duration-300 ease-in-out">
+                        <input type="hidden" name="edit_thumbnail" id="edit_thumbnail">
+                        <p class="text-gray-500 text-xs mt-1">รองรับไฟล์ jpg, jpeg, png, gif, webp ขนาดไม่เกิน 5MB</p>
+                        <div id="current_thumbnail" class="mt-2"></div>
                     </div>
                     
                     <div>
                         <label class="block text-gray-700 text-sm font-bold mb-2" for="edit_subject_id">วิชา</label>
                         <select name="edit_subject_id" id="edit_subject_id" class="w-full px-3 py-2 border rounded-lg shadow-sm input-focus transition duration-300 ease-in-out" required>
+                            <option value="">-- เลือกรายวิชา --</option>
                             <?php 
-                            $subjects = $conn->query("SELECT * FROM subjects ORDER BY name");
-                            while($subject = $subjects->fetch_assoc()): 
+                            $edit_subjects = $conn->query("SELECT * FROM subjects ORDER BY name");
+                            while($subject = $edit_subjects->fetch_assoc()): 
                             ?>
                             <option value="<?php echo $subject['id']; ?>">
                                 <?php echo htmlspecialchars($subject['name']); ?>
@@ -663,15 +770,42 @@ $media_files = $stmt->get_result();
     </div>
     
     <script>
-        function openEditModal(id, title, fileId, fileType, subjectId, documentReferences, illustrations) {
+        function openEditModal(id, title, fileId, fileType, subjectId, documentReferences, illustrations, thumbnail) {
             document.getElementById('edit_id').value = id;
             document.getElementById('edit_title').value = title;
             document.getElementById('edit_file_id').value = fileId;
             document.getElementById('edit_file_type').value = fileType;
             document.getElementById('edit_subject_id').value = subjectId;
             document.getElementById('edit_document_references').value = documentReferences;
-            document.getElementById('edit_illustrations_file').value = illustrations;
+            document.getElementById('edit_illustrations').value = illustrations || '';
+            document.getElementById('edit_thumbnail').value = thumbnail || '';
+            
+            // แสดงปกคลิปปัจจุบัน
+            const currentThumbnailDiv = document.getElementById('current_thumbnail');
+            if(thumbnail) {
+                currentThumbnailDiv.innerHTML = `
+                    <p class="text-sm text-gray-600 mb-1">ปกคลิปปัจจุบัน:</p>
+                    <img src="${thumbnail}" alt="ปกคลิปปัจจุบัน" class="w-24 h-16 object-cover rounded border">
+                `;
+            } else {
+                currentThumbnailDiv.innerHTML = '<p class="text-sm text-gray-500">ไม่มีปกคลิป</p>';
+            }
+            
             document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        // ฟังก์ชันสำหรับแสดง/ซ่อนฟิลด์อัพโหลดไฟล์ในโหมดแก้ไข
+        function toggleEditFileInput(fileType) {
+            const googleDriveInput = document.getElementById('edit_google_drive_input');
+            const imageUploadInput = document.getElementById('edit_image_upload_input');
+            
+            if(fileType === 'image') {
+                googleDriveInput.style.display = 'none';
+                imageUploadInput.style.display = 'block';
+            } else {
+                googleDriveInput.style.display = 'block';
+                imageUploadInput.style.display = 'none';
+            }
         }
 
         // เพิ่มฟังก์ชันสำหรับจัดการลิงก์ Google Drive
@@ -745,6 +879,60 @@ $media_files = $stmt->get_result();
                 }
             }
         });
+
+        // เพิ่มฟังก์ชันสำหรับจัดการรายวิชาตามสาขาที่เลือก
+        function updateSubjects(departmentId) {
+            const subjectSelect = document.getElementById('subject_id');
+            const editSubjectSelect = document.getElementById('edit_subject_id');
+            const filterSubjectSelect = document.getElementById('filter_subject');
+            
+            // Clear current options
+            subjectSelect.innerHTML = '<option value="">-- เลือกรายวิชา --</option>';
+            if(editSubjectSelect) {
+                editSubjectSelect.innerHTML = '<option value="">-- เลือกรายวิชา --</option>';
+            }
+            if(filterSubjectSelect) {
+                filterSubjectSelect.innerHTML = '<option value="0">-- ทั้งหมด --</option>';
+            }
+            
+            if(departmentId) {
+                // Fetch subjects for selected department
+                fetch(`get_subjects.php?department_id=${departmentId}`)
+                    .then(response => response.json())
+                    .then(subjects => {
+                        subjects.forEach(subject => {
+                            const option = new Option(subject.name, subject.id);
+                            subjectSelect.add(option);
+                            if(editSubjectSelect) {
+                                const editOption = new Option(subject.name, subject.id);
+                                editSubjectSelect.add(editOption);
+                            }
+                            if(filterSubjectSelect) {
+                                const filterOption = new Option(subject.name, subject.id);
+                                filterSubjectSelect.add(filterOption);
+                            }
+                        });
+                    });
+            }
+        }
+
+        // เพิ่มฟังก์ชันสำหรับอัพเดท filter subject เมื่อเลือก department
+        function updateFilterSubject(departmentId) {
+            const filterSubjectSelect = document.getElementById('filter_subject');
+            if(filterSubjectSelect) {
+                filterSubjectSelect.innerHTML = '<option value="0">-- ทั้งหมด --</option>';
+                if(departmentId) {
+                    fetch(`get_subjects.php?department_id=${departmentId}`)
+                        .then(response => response.json())
+                        .then(subjects => {
+                            subjects.forEach(subject => {
+                                const option = new Option(subject.name, subject.id);
+                                filterSubjectSelect.add(option);
+                            });
+                        });
+                }
+            }
+        }
     </script>
 </body>
 </html>

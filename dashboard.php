@@ -169,6 +169,18 @@ if(!empty($search)) {
     }
 }
 
+// เพิ่มระบบ pagination
+$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$per_page = isset($_GET['per_page']) ? (int)$_GET['per_page'] : 12;
+
+// จำกัดจำนวนรายการต่อหน้าที่อนุญาต
+$allowed_per_page = [12, 24, 48, 96];
+if(!in_array($per_page, $allowed_per_page)) {
+    $per_page = 12;
+}
+
+$offset = ($page - 1) * $per_page;
+
 // ดึงข้อมูลสื่อที่ผู้ใช้มีสิทธิ์เข้าถึง
 $media_query = "SELECT DISTINCT m.*, s.name as subject_name, d.name as department_name, 
         u.username as created_by_name,
@@ -180,8 +192,17 @@ $media_query = "SELECT DISTINCT m.*, s.name as subject_name, d.name as departmen
         LEFT JOIN media_links ml ON m.id = ml.media_id
         WHERE 1=1 ";
 
+// Query สำหรับนับจำนวนทั้งหมด
+$count_query = "SELECT COUNT(DISTINCT m.id) as total
+        FROM media_files m
+        JOIN subjects s ON m.subject_id = s.id
+        JOIN departments d ON s.department_id = d.id
+        LEFT JOIN users u ON m.created_by = u.id
+        LEFT JOIN media_links ml ON m.id = ml.media_id
+        WHERE 1=1 ";
+
 if($role !== 'admin') {
-    $media_query .= "AND s.id IN (
+    $permission_condition = "AND s.id IN (
         SELECT subject_id FROM user_subjects WHERE user_id = ?
         UNION
         SELECT s.id FROM subjects s
@@ -191,28 +212,77 @@ if($role !== 'admin') {
     AND s.id NOT IN (
         SELECT subject_id FROM subject_exclusions WHERE user_id = ?
     ) ";
+    
+    $media_query .= $permission_condition;
+    $count_query .= $permission_condition;
 }
 
 // เพิ่มเงื่อนไขการค้นหา
 if(!empty($search)) {
-    $media_query .= "AND m.title LIKE ? ";
+    $search_condition = "AND m.title LIKE ? ";
+    $media_query .= $search_condition;
+    $count_query .= $search_condition;
 }
 
 // เพิ่มเงื่อนไขสาขาวิชา
 if($dept_id > 0) {
-    $media_query .= "AND s.department_id = ? ";
+    $dept_condition = "AND s.department_id = ? ";
+    $media_query .= $dept_condition;
+    $count_query .= $dept_condition;
 }
 
 // เพิ่มเงื่อนไขวิชา
 if($subject_id > 0) {
-    $media_query .= "AND m.subject_id = ? ";
+    $subject_condition = "AND m.subject_id = ? ";
+    $media_query .= $subject_condition;
+    $count_query .= $subject_condition;
 }
 
-$media_query .= "GROUP BY m.id ORDER BY m.title";
+// เพิ่ม GROUP BY และ ORDER BY ลงใน media_query
+$media_query .= "GROUP BY m.id ORDER BY m.title LIMIT ? OFFSET ?";
 
+// ดึงจำนวนรายการทั้งหมดก่อน
+$count_stmt = $conn->prepare($count_query);
+
+// Bind parameters สำหรับ count query
+$count_params = [];
+$count_types = "";
+
+if($role !== 'admin') {
+    $count_params[] = $user_id;
+    $count_params[] = $user_id;
+    $count_params[] = $user_id;
+    $count_types .= "iii";
+}
+
+if(!empty($search)) {
+    $search_param = "%$search%";
+    $count_params[] = $search_param;
+    $count_types .= "s";
+}
+
+if($dept_id > 0) {
+    $count_params[] = $dept_id;
+    $count_types .= "i";
+}
+
+if($subject_id > 0) {
+    $count_params[] = $subject_id;
+    $count_types .= "i";
+}
+
+if(!empty($count_params)) {
+    $count_stmt->bind_param($count_types, ...$count_params);
+}
+
+$count_stmt->execute();
+$total_records = $count_stmt->get_result()->fetch_assoc()['total'];
+$total_pages = ceil($total_records / $per_page);
+
+// ดึงข้อมูลสื่อพร้อม pagination
 $stmt = $conn->prepare($media_query);
 
-// Bind parameters
+// Bind parameters สำหรับ main query
 $params = [];
 $types = "";
 
@@ -238,6 +308,11 @@ if($subject_id > 0) {
     $params[] = $subject_id;
     $types .= "i";
 }
+
+// เพิ่ม parameters สำหรับ LIMIT และ OFFSET
+$params[] = $per_page;
+$params[] = $offset;
+$types .= "ii";
 
 if(!empty($params)) {
     $stmt->bind_param($types, ...$params);
