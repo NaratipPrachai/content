@@ -87,6 +87,14 @@ while($row = $link_result->fetch_assoc()) {
         <?php include 'navbar.php'; ?>
         <?php include 'header_banner.php'; ?>
         
+        <!-- ปุ่มกลับ -->
+        <div class="mb-4">
+            <a href="index.php" class="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-300 shadow-md">
+                <i class="fas fa-arrow-left mr-2"></i>
+                กลับไปหน้าหลัก
+            </a>
+        </div>
+        
         <!-- ส่วนแสดงสื่อ -->
         <div class="w-full">
             <div class="bg-white rounded-lg shadow-md p-4 mb-6">
