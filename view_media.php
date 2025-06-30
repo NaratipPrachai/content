@@ -22,7 +22,7 @@ if(!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 $media_id = intval($_GET['id']);
 
 // ดึงข้อมูลสื่อ
-$stmt = $conn->prepare("SELECT m.*, s.name as subject_name, u.username as created_by_name FROM media_files m JOIN subjects s ON m.subject_id = s.id LEFT JOIN users u ON m.created_by = u.id WHERE m.id = ?");
+$stmt = $conn->prepare("SELECT m.*, s.name as subject_name, d.name as department_name, u.username as created_by_name FROM media_files m JOIN subjects s ON m.subject_id = s.id LEFT JOIN departments d ON s.department_id = d.id LEFT JOIN users u ON m.created_by = u.id WHERE m.id = ?");
 $stmt->bind_param("i", $media_id);
 $stmt->execute();
 $media = $stmt->get_result()->fetch_assoc();
