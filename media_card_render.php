@@ -86,54 +86,13 @@ if(!empty($media['thumbnail']) && file_exists(__DIR__ . '/' . $media['thumbnail'
     </div>
     <?php endif; ?>
     
-    <!-- ส่วนหัวการ์ด -->
-    <div class="p-4 border-b border-gray-100">
-        <div class="flex items-center justify-between mb-2">
-            <span class="text-2xl"><?php echo $icon; ?></span>
-            <div class="flex items-center space-x-2">
-                <?php if($ep_count > 0): ?>
-                <span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-full text-xs">
-                    <i class="fas fa-list-ol mr-1"></i> <?php echo $ep_count; ?> EP
-                </span>
-                <?php endif; ?>
-                <span class="text-sm text-gray-500">
-                    <?php echo ucfirst($media['file_type']); ?>
-                </span>
-            </div>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-800 mb-1 line-clamp-2">
+    <!-- ส่วนหัวการ์ด - เฉพาะชื่อเรื่อง -->
+    <div class="p-4">
+        <h3 class="text-lg font-semibold text-gray-800 mb-2 line-clamp-2">
             <?php echo htmlspecialchars($media['title']); ?>
         </h3>
-        <div class="flex flex-col space-y-1">
-            <p class="text-sm text-gray-600">
-                <i class="fas fa-book mr-1"></i> <?php echo htmlspecialchars($media['subject_name']); ?>
-            </p>
-            <?php if(isset($media['department_name'])): ?>
-            <p class="text-sm text-gray-500">
-                <i class="fas fa-university mr-1"></i> <?php echo htmlspecialchars($media['department_name']); ?>
-            </p>
-            <?php endif; ?>
-        </div>
-    </div>
-    
-    <!-- ส่วนท้ายการ์ด -->
-    <div class="p-4 bg-gray-50">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <span class="text-sm text-gray-500">
-                    <i class="fas fa-calendar-alt mr-1"></i>
-                    <?php echo date('d M Y', strtotime($media['created_at'])); ?>
-                </span>
-                <?php if(isset($media['created_by_name'])): ?>
-                <span class="text-sm text-gray-500">
-                    <i class="fas fa-user mr-1"></i>
-                    <?php echo htmlspecialchars($media['created_by_name']); ?>
-                </span>
-                <?php endif; ?>
-            </div>
-            <a href="<?php echo $detail_url; ?>" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
-                <i class="fas fa-eye mr-1"></i> ดูรายละเอียด
-            </a>
-        </div>
+        <a href="<?php echo $detail_url; ?>" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 text-sm font-medium">
+            <i class="fas fa-eye mr-1"></i> ดูรายละเอียด
+        </a>
     </div>
 </div> 

@@ -15,7 +15,7 @@ $role = $_SESSION['role'];
         <div class="mr-4 text-indigo-600">
             <i class="fas fa-book-reader text-3xl"></i>
         </div>
-        <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">สื่อ Content</h1>
+        <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">สื่อ CONTENT</h1>
     </div>
     <div class="flex items-center">
         <div class="mr-6 flex items-center">
