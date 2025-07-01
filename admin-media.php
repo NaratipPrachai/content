@@ -376,54 +376,44 @@ $search = isset($_GET['search']) ? htmlspecialchars(trim($_GET['search'])) : '';
 $filter_department = isset($_GET['department']) ? intval($_GET['department']) : 0;
 
 // สร้าง prepared statement สำหรับการดึงข้อมูลสื่อ
+$where_conditions = [];
+$params = [];
+$param_types = "";
+
+// เพิ่มเงื่อนไขการกรอง
 if($filter_subject > 0) {
-    if(!empty($search)) {
-        $stmt = $conn->prepare("SELECT m.*, s.name as subject_name, u.username as created_by_name,
-                GROUP_CONCAT(ml.google_drive_file_id SEPARATOR '|') as drive_links
-                FROM media_files m
-                JOIN subjects s ON m.subject_id = s.id
-                LEFT JOIN users u ON m.created_by = u.id
-                LEFT JOIN media_links ml ON m.id = ml.media_id
-                WHERE m.subject_id = ? AND m.title LIKE ?
-                GROUP BY m.id
-                ORDER BY m.title");
-        $search_param = "%$search%";
-        $stmt->bind_param("is", $filter_subject, $search_param);
-    } else {
-        $stmt = $conn->prepare("SELECT m.*, s.name as subject_name, u.username as created_by_name,
-                GROUP_CONCAT(ml.google_drive_file_id SEPARATOR '|') as drive_links
-                FROM media_files m
-                JOIN subjects s ON m.subject_id = s.id
-                LEFT JOIN users u ON m.created_by = u.id
-                LEFT JOIN media_links ml ON m.id = ml.media_id
-                WHERE m.subject_id = ?
-                GROUP BY m.id
-                ORDER BY m.title");
-        $stmt->bind_param("i", $filter_subject);
-    }
-} else {
-    if(!empty($search)) {
-        $stmt = $conn->prepare("SELECT m.*, s.name as subject_name, u.username as created_by_name,
-                GROUP_CONCAT(ml.google_drive_file_id SEPARATOR '|') as drive_links
-                FROM media_files m
-                JOIN subjects s ON m.subject_id = s.id
-                LEFT JOIN users u ON m.created_by = u.id
-                LEFT JOIN media_links ml ON m.id = ml.media_id
-                WHERE m.title LIKE ?
-                GROUP BY m.id
-                ORDER BY m.title");
-        $search_param = "%$search%";
-        $stmt->bind_param("s", $search_param);
-    } else {
-        $stmt = $conn->prepare("SELECT m.*, s.name as subject_name, u.username as created_by_name,
-                GROUP_CONCAT(ml.google_drive_file_id SEPARATOR '|') as drive_links
-                FROM media_files m
-                JOIN subjects s ON m.subject_id = s.id
-                LEFT JOIN users u ON m.created_by = u.id
-                LEFT JOIN media_links ml ON m.id = ml.media_id
-                GROUP BY m.id
-                ORDER BY m.title");
-    }
+    $where_conditions[] = "m.subject_id = ?";
+    $params[] = $filter_subject;
+    $param_types .= "i";
+} else if($filter_department > 0) {
+    $where_conditions[] = "s.department_id = ?";
+    $params[] = $filter_department;
+    $param_types .= "i";
+}
+
+if(!empty($search)) {
+    $where_conditions[] = "m.title LIKE ?";
+    $params[] = "%$search%";
+    $param_types .= "s";
+}
+
+// สร้าง SQL query
+$sql = "SELECT m.*, s.name as subject_name, u.username as created_by_name,
+        GROUP_CONCAT(ml.google_drive_file_id SEPARATOR '|') as drive_links
+        FROM media_files m
+        JOIN subjects s ON m.subject_id = s.id
+        LEFT JOIN users u ON m.created_by = u.id
+        LEFT JOIN media_links ml ON m.id = ml.media_id";
+
+if(!empty($where_conditions)) {
+    $sql .= " WHERE " . implode(" AND ", $where_conditions);
+}
+
+$sql .= " GROUP BY m.id ORDER BY m.title";
+
+$stmt = $conn->prepare($sql);
+if(!empty($params)) {
+    $stmt->bind_param($param_types, ...$params);
 }
 
 $stmt->execute();
