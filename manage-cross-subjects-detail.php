@@ -91,20 +91,18 @@ if(isset($_GET['remove_subject_id'])) {
 // ดึงรายการสาขาวิชาทั้งหมด
 $departments = $conn->query("SELECT * FROM departments ORDER BY name");
 
-// ดึงวิชาที่ผู้ใช้มีสิทธิ์เข้าถึงแล้ว โดยไม่ได้มาจากสิทธิ์ระดับสาขาวิชา
-$cross_subjects_sql = "SELECT us.*, s.name as subject_name, d.name as department_name, d.id as department_id
-                      FROM user_subjects us
-                      JOIN subjects s ON us.subject_id = s.id
-                      JOIN departments d ON s.department_id = d.id
-                      WHERE us.user_id = $user_id
-                      AND s.department_id NOT IN (
-                          SELECT department_id FROM user_departments WHERE user_id = $user_id
-                      )
-                      ORDER BY d.name, s.name";
-$cross_subjects = $conn->query($cross_subjects_sql);
+// ดึงวิชาที่ผู้ใช้มีสิทธิ์เข้าถึงแล้ว (ทั้งจาก user_subjects และ user_departments)
+$all_personal_subjects_sql = "SELECT s.*, d.name as department_name, d.id as department_id
+    FROM subjects s
+    JOIN departments d ON s.department_id = d.id
+    WHERE s.id IN (
+        SELECT subject_id FROM user_subjects WHERE user_id = $user_id
+    )
+    ORDER BY d.name, s.name";
+$all_personal_subjects = $conn->query($all_personal_subjects_sql);
 
 // นับจำนวนวิชาข้ามแผนกทั้งหมด
-$total_cross_subjects = $cross_subjects->num_rows;
+$total_cross_subjects = $all_personal_subjects->num_rows;
 ?>
 
 <!DOCTYPE html>
@@ -214,11 +212,10 @@ $total_cross_subjects = $cross_subjects->num_rows;
                     </div>
                 </div>
 
-                <!-- รายการวิชาข้ามแผนก -->
+                <!-- รายการวิชาที่มีสิทธิ์เข้าถึงแบบส่วนตัว -->
                 <div class="mt-8 bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-xl font-bold mb-4">รายการวิชาข้ามแผนก</h2>
-                    
-                    <?php if($total_cross_subjects > 0): ?>
+                    <h2 class="text-xl font-bold mb-4">รายการวิชาที่มีสิทธิ์เข้าถึงแบบส่วนตัว</h2>
+                    <?php if($all_personal_subjects->num_rows > 0): ?>
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
@@ -229,20 +226,16 @@ $total_cross_subjects = $cross_subjects->num_rows;
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
-                                <?php 
-                                // รีเซ็ต cross_subjects result
-                                $cross_subjects = $conn->query($cross_subjects_sql);
-                                while($subject = $cross_subjects->fetch_assoc()): 
-                                ?>
+                                <?php while($subject = $all_personal_subjects->fetch_assoc()): ?>
                                 <tr>
                                     <td class="px-4 py-3 whitespace-nowrap">
                                         <span class="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs">
                                             <i class="fas fa-university mr-1"></i> <?php echo htmlspecialchars($subject['department_name']); ?>
                                         </span>
                                     </td>
-                                    <td class="px-4 py-3 whitespace-nowrap"><?php echo htmlspecialchars($subject['subject_name']); ?></td>
+                                    <td class="px-4 py-3 whitespace-nowrap"><?php echo htmlspecialchars($subject['name']); ?></td>
                                     <td class="px-4 py-3 whitespace-nowrap">
-                                        <a href="?user_id=<?php echo $user_id; ?>&remove_subject_id=<?php echo $subject['subject_id']; ?>" 
+                                        <a href="?user_id=<?php echo $user_id; ?>&remove_subject_id=<?php echo $subject['id']; ?>" 
                                            class="text-red-500 hover:text-red-700" 
                                            onclick="return confirm('ยืนยันการลบสิทธิ์การเข้าถึงวิชานี้?')">
                                             <i class="fas fa-times"></i> ลบสิทธิ์
@@ -256,7 +249,7 @@ $total_cross_subjects = $cross_subjects->num_rows;
                     <?php else: ?>
                     <div class="text-center text-gray-500 py-8">
                         <i class="fas fa-info-circle text-4xl mb-4"></i>
-                        <p>ไม่มีรายการวิชาข้ามแผนก</p>
+                        <p>ไม่มีรายการวิชาที่มีสิทธิ์เข้าถึง</p>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -274,20 +267,17 @@ $total_cross_subjects = $cross_subjects->num_rows;
                 const departmentId = this.value;
                 const userId = <?php echo $user_id; ?>;
                 
+                // Clear previous subjects
+                subjectSelect.innerHTML = '<option value="" disabled>กำลังโหลด...</option>';
+                
                 if(departmentId) {
-                    // ดึงรายวิชาจาก API
-                    fetch(`get-subjects-by-department.php?department_id=${departmentId}&user_id=${userId}`)
+                    // ดึงรายวิชาจาก API (เฉพาะวิชาที่ยังไม่มีสิทธิ์)
+                    const url = `get-subjects-by-department.php?department_id=${departmentId}&user_id=${userId}`;
+                    fetch(url)
                         .then(response => response.json())
                         .then(subjects => {
                             subjectSelect.innerHTML = '';
-                            if(subjects.error) {
-                                // แสดง error ที่ได้จาก PHP
-                                const option = document.createElement('option');
-                                option.value = '';
-                                option.textContent = '-- เกิดข้อผิดพลาด: ' + subjects.error + ' --';
-                                option.disabled = true;
-                                subjectSelect.appendChild(option);
-                            } else if(subjects.length > 0) {
+                            if(Array.isArray(subjects) && subjects.length > 0) {
                                 subjects.forEach(subject => {
                                     const option = document.createElement('option');
                                     option.value = subject.id;
@@ -295,16 +285,12 @@ $total_cross_subjects = $cross_subjects->num_rows;
                                     subjectSelect.appendChild(option);
                                 });
                             } else {
-                                const option = document.createElement('option');
-                                option.value = '';
-                                option.textContent = '-- ไม่มีรายวิชาที่สามารถเพิ่มได้ --';
-                                option.disabled = true;
-                                subjectSelect.appendChild(option);
+                                subjectSelect.innerHTML = '<option value="" disabled>-- ไม่มีรายวิชาที่สามารถเพิ่มได้ --</option>';
                             }
                         })
                         .catch(error => {
-                            subjectSelect.innerHTML = `<option value="" disabled>-- เกิดข้อผิดพลาด JS: ${error} --</option>`;
-                            console.error('Error:', error);
+                            subjectSelect.innerHTML = `<option value="" disabled>-- เกิดข้อผิดพลาด: ${error.message} --</option>`;
+                            alert('เกิดข้อผิดพลาดในการดึงข้อมูลรายวิชา: ' + error.message);
                         });
                 } else {
                     subjectSelect.innerHTML = '<option value="" disabled>-- เลือกแผนกวิชาก่อน --</option>';

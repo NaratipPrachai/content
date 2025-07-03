@@ -341,11 +341,10 @@ $excluded_subjects = $conn->query($excluded_subjects_sql);
         function setupSearch(searchInputId, containerSelector) {
             const searchInput = document.getElementById(searchInputId);
             const container = document.querySelector(containerSelector);
+            if (!searchInput || !container) return;
             const items = container.querySelectorAll('.subject-item');
-            
             searchInput.addEventListener('input', function() {
                 const searchTerm = this.value.toLowerCase();
-                
                 items.forEach(item => {
                     const text = item.textContent.toLowerCase();
                     if (text.includes(searchTerm)) {
@@ -360,18 +359,16 @@ $excluded_subjects = $conn->query($excluded_subjects_sql);
         // ฟังก์ชันสำหรับนับจำนวนรายการที่เลือก
         function updateSelectedCount(formId, checkboxSelector, countElementId) {
             const form = document.getElementById(formId);
+            if (!form) return;
             const checkboxes = form.querySelectorAll(checkboxSelector);
             const countElement = document.getElementById(countElementId);
-            
             function updateCount() {
                 const selectedCount = [...checkboxes].filter(cb => cb.checked).length;
-                countElement.textContent = selectedCount;
+                if (countElement) countElement.textContent = selectedCount;
             }
-            
             checkboxes.forEach(checkbox => {
                 checkbox.addEventListener('change', updateCount);
             });
-            
             updateCount(); // อัพเดทครั้งแรก
         }
         
@@ -380,30 +377,29 @@ $excluded_subjects = $conn->query($excluded_subjects_sql);
             const selectAllBtn = document.getElementById(selectAllId);
             const deselectAllBtn = document.getElementById(deselectAllId);
             const form = document.getElementById(formId);
-            
             if (selectAllBtn) {
                 selectAllBtn.addEventListener('click', function() {
+                    if (!form) { console.log('Form not found:', formId); return; }
                     const checkboxes = form.querySelectorAll(checkboxSelector);
                     const visibleCheckboxes = [...checkboxes].filter(cb => {
                         return cb.closest('.subject-item').style.display !== 'none';
                     });
-                    
                     visibleCheckboxes.forEach(cb => {
                         cb.checked = true;
                         cb.dispatchEvent(new Event('change'));
                     });
                 });
-            }
-            
+            } else { console.log('SelectAll button not found:', selectAllId); }
             if (deselectAllBtn) {
                 deselectAllBtn.addEventListener('click', function() {
+                    if (!form) { console.log('Form not found:', formId); return; }
                     const checkboxes = form.querySelectorAll(checkboxSelector);
                     checkboxes.forEach(cb => {
                         cb.checked = false;
                         cb.dispatchEvent(new Event('change'));
                     });
                 });
-            }
+            } else { console.log('DeselectAll button not found:', deselectAllId); }
         }
         
         // ตั้งค่าการทำงานเมื่อหน้าเว็บโหลดเสร็จ
